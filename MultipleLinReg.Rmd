@@ -1,0 +1,251 @@
+---
+title: "Build and Evaluate Multiple Linear Regression"
+author: Dr. Nishat Mohammad
+date: 03/02/2024
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+## Load data:
+
+```{r}
+# load student.mat file
+path= "./student_performance/student/student-mat.csv"
+student_mat <- read.table(path, sep=";",header=TRUE)
+
+any(is.na(student_mat))
+str(student_mat)
+
+
+```
+This is the student math data, with 395 rows of observations on 33 columns of variables all of type either integer or character.  
+
+
+## 1. Visualize Correlation Between Age, Absences and Grades:  
+
+Create scatter plots and pairwise correlations between age, absences, G1, and G2 and final grade (G3) using the pairs.panels() function in R.  
+
+```{r Q1}
+library(psych)
+
+pairs.panels(student_mat[c("age", "absences", "G1", "G2", "G3")])
+```
+
+## 2. Mutiple Regression Model:  
+
+Build a multiple regression model predicting final math grade (G3) using as many features as you like but you must use at least four. Include at least one categorical variables and be sure to encode it properly using a method of your choice. Select the features that you believe are useful -- you do not have to include all features.  
+
+```{r}
+# Use the absences, activities and the first two grades as features to predict final grade
+summary(student_mat[c("absences", "activities", "G1", "G2")])
+
+# Factor encode the activities
+student_mat$activities <- ifelse(student_mat$activities=="yes", 1, 0)
+
+# Create the model
+final_grade_model <- lm(G3 ~ activities+absences+G1+G2, data=student_mat)
+
+# Look at the model
+summary(final_grade_model)
+
+```
+The summary of the model shows:
+1. The Residual differences between the actual values and predicted one based on the some descriptive statistics measures like min max, median and 1st and 3rd quantiles.  
+
+2. The Coefficients for each feature have been displayed with the corresponding standard error and t-values with the p-values for the t tests.  according to this model the G2 is very significant in contributing to the outcome of the final grade while G1 and absences are significant but to a lesser extent as depicted by the number of * assigned after the p-values which code for the significance level. Very obvious is that "activities" does not have significance according to our model.  
+
+3. The Multiple R-squared and its adjusted counterpart are both very close, implying that the features I selected can account for only around 82% of the proportion of variance in the final grades.  
+
+4. The F-statisic has a very low p-value of 2.2e-16, indicating that this model is significant.  
+
+## 3. Stepwise Backward Elimintaion:  
+
+Using the model from (2), use stepwise backward elimination to remove all non-significant variables and then state the final model as an equation. State the backward elimination measure you applied (p-value, AIC, Adjusted R2). This tutorial shows how to use various feature elimination techniques.
+
+```{r Q3}
+# Create a new model without activities
+final_grade_model2 <- lm(G3 ~ absences + G1 + G2, data=student_mat)
+summary(final_grade_model2)
+
+```
+Taking off the ""activities based on the fact that the p-value of the test showed that is is not significant. the resulting model has changed slightly only on the Residuals. R- squared values remain similar to the previous model as well.  the overall pvalue of the F-statistics remains the same and thus this model is significant.  
+
+Let us look out for interaction between extracurricular activites and absences with anothe model below:
+
+```{r }
+final_grade_model3 <- lm(G3 ~ G1 + G2+ absences*activities, data=student_mat)
+summary(final_grade_model3)
+
+```
+this 3rd model shows that absences and absences:activities do not have significance, while activities now seem to have sligth significance. All other. parameters remain the same.  
+
+Let us take of all features except the G1 and G2 with the code chunk below:  
+
+```{r}
+final_grade_model4 <- lm(G3 ~ G1 + G2, data=student_mat)
+summary(final_grade_model4)
+```
+The fourth model also shows similar stats, similar R-squared values and pvalues. It would be best to compare the models with ANOVA and look for the model with lowest p value on ANOVA test. 
+
+```{r ANOVA}
+anov_2_1 <- anova(final_grade_model2, final_grade_model)
+
+anov_3_1 <- anova(final_grade_model3, final_grade_model)
+anov_3_1
+
+anov_4_1 <- anova(final_grade_model4, final_grade_model)
+anov_4_1
+
+```
+The anova results foe comparing all the models against the first have been doen and the conclusion is that the first model is the best model. based on the final anova test between the 4th and 1st model with p value of 0.00403 having ** meaning this is significant anova comparison.  
+
+## 3. Get the 95% CI:  
+
+Calculate the 95% confidence interval for a prediction -- you may choose any data you wish for some new student.
+
+```{r CI}
+absences<-c(2)
+activities <- c(0)
+G1 <- c(10)
+G2 <- c(15)
+nw_candid <- data.frame(absences, activities, G1, G2)
+
+final_grade_nw_candidate <- predict(final_grade_model, nw_candid)
+final_grade_nw_candidate
+stats4model<-summary(final_grade_model)
+
+# Get the lower limit of confidence interval
+lower_CI <- final_grade_nw_candidate - 1.96 * stats4model$sigma 
+
+# Get the upper limit of Confidence interval
+upper_CI <- final_grade_nw_candidate + 1.96 * stats4model$sigma 
+
+```
+The final grade for th demo  new candidate is `r final_grade_nw_candidate`. The 95% confidence interval for this is `r lower_CI`, `r upper_CI`.  
+
+## 4. RMSE for the Model:  
+
+What is the RMSE for this model -- use the entire data set for both training and validation. You may find the residuals() function useful. Alternatively, you can inspect the model object, e.g., if your model is in the variable m, then the residuals (errors) are in m$residuals and your predicted values (fitted values) are in m$fitted.values.  
+
+```{r RMSE1}
+# Predict using all the data
+final_grade_prediction <- predict(final_grade_model, student_mat[c("absences", "activities", "G1", "G2")])
+
+# Get RMSE
+RMSE_stud_mat <- sqrt(mean((final_grade_prediction - student_mat$G3)^2))
+RMSE_stud_mat
+
+# Another way to get the RMSE
+Same_RMSE <- sqrt(mean((stats4model$residuals)^2))
+
+```
+The RMSE is for this model is `r RMSE_stud_mat`. I calculated this form scratch and also using the residuals form the model summary.  
+
+## 5. Reconsider Missing Values, Outliers and Normality of the Data:  
+
+We did not consider outliers, manage missing values, nor check for normality of the included features. This is important, so return to the data set and check for missing values and use an appropriate strategy to deal with them, check that all features are reasonably normally distributed -- and, if not, apply a transform (e.g., log-transform), and, finally, consider outliers as statistical learning algorithms are sensitive to outliers. Next, rebuild your regression model using appropriate features.
+
+```{r reconsiderations}
+# Look at the data again
+summary(student_mat)
+str(student_mat)
+
+# Show the absence of missing values again
+any(is.na(student_mat))
+
+# Check normality for integer type columns
+int_columns <- student_mat[sapply(student_mat, is.integer)]
+head(int_columns)
+
+
+```
+First look at the data again, there are no missing values, also there are several variables that are ordinal categorical. let us choose only the integer data that is continuous to check for normality.  
+
+### 5.1. Shapiro-Wilk Test, Visualization, Skewness:  
+
+```{r Normality}
+cont_int_columns <- student_mat[, c("age", "absences", "G1", "G2", "G3")]
+
+# Shapiro test 
+shapiro_tests <- sapply(cont_int_columns, shapiro.test)
+shapiro_tests
+
+# Visualize with histograms
+par(mfrow=c(2, 3))
+for (col in names(cont_int_columns)) {
+  hist(cont_int_columns[[col]], main = col, xlab = col)
+}
+# Check for skewness
+library(e1071)
+skewnez <- sapply(cont_int_columns, skewness)
+skewnez
+
+```
+
+The Histograms show that none of the variables are perfectly normally distributed, this can also be seen with the results of Shapiro Tests.
+I checked for the skewness as well which shped the G2 having a slight left skew and G3 moderately skewed to the left, G1 and age are slightly right skewed, while absences are heavily right skewed (shows that majority of students were punctual).  
+
+### 5.2. Log Transformation:
+```{r transform}
+log_transform_columns <- lapply(cont_int_columns, function(x) log(x + 1))
+
+# Plot histograms for each log-transformed variable
+par(mfrow=c(2, 3))  # Set up the layout for multiple plots
+for (i in 1:length(log_transform_columns)) {
+  hist(log_transform_columns[[i]], 
+       main = paste(names(log_transform_columns)[i],
+                    "(log transformed)"), 
+       xlab = "log(value)")
+}
+```
+The varibales have now been log transformed and visualized again. we can go ahead to filter out outliers.  
+
+### 5.3. Handle Outliers:
+
+```{r Handle_outliers}
+# Quantile method in a function
+str(log_transform_columns)
+handle_with_quantile <- function(x, threshold = 1.5) {
+  # Convert x to atomic vector
+  x <- unlist(x)
+  # Calculate quartiles
+  q <- quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
+  # Calculate interquartile range
+  iqr <- diff(q)
+  # Calculate lower and upper bounds
+  lower_bound <- q[1] - threshold * iqr
+  upper_bound <- q[2] + threshold * iqr
+  # Identify outliers
+  outliers <- which(x < lower_bound | x > upper_bound)
+  # Replace outliers with NA
+  x[outliers] <- NA
+  
+  return(x)
+}
+clean_data <- lapply(log_transform_columns, handle_with_quantile)
+str(clean_data)
+par(mfrow=c(2, 3))
+for (i in 1:length(clean_data)) {
+  hist(clean_data[[i]], main = names(log_transform_columns)[i], xlab = names(log_transform_columns)[i])
+}
+
+```
+
+### 5.4. Remodel with Linear Regression:
+
+```{r Remodel}
+
+clean_data<- na.omit(clean_data)
+clean_data1 <- as.data.frame(clean_data)
+
+latest_model <- lm(G3 ~ ., data = clean_data1)
+summary(latest_model)
+
+```
+Here we checked the model using the cleaned data, the new model uses the age, absences, G1 and G2 features to predict the G3. It shows that both G1 and G2 are strongly significant for the prediction of the final grades.  
+The R squared and its adjusted counterpart are similar in values but have increased from the previous model to 90%. the model p-value is 2.2e-16 implying this model is significantly strong.  

@@ -1,0 +1,168 @@
+---
+title: "Build and Evaluate Logistic Regression Model"
+author: Dr. Nishat Mohammad
+date: 03/02/2024
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+## 1. Load data:  
+
+Download the data set on student achievementLinks to an external site. in secondary education math education of two Portuguese schools (use the data set Students Math).  
+
+```{r loading_data}
+# load student.mat file
+path= "./student_performance/student/student-mat.csv"
+student_math <- read.table(path, sep=";",header=TRUE)
+
+any(is.na(student_math))
+str(student_math)
+```
+
+
+## 2. Pass Fail Column:  
+
+Add another column, PF -- pass-fail. Mark any student whose final grade is less than 10 as F, otherwise as P and then build a dummy code variable for that new column. Use the new dummy variable column as the response variable with 0 for F and 1 for P.
+
+```{r PF}
+# Create PF column
+student_math$PF <- ifelse(student_math$G3 < 10, "F", "P")
+
+# Encoding
+student_math$PF <- ifelse(student_math$PF=="P", 1, 0)
+head(student_math$PF)
+
+```
+
+## 3. Binomial Regression Model:  
+
+Build a binomial logistic regression model classifying a student as passing or failing. Eliminate any non-significant variable using an elimination approach of your choice. Use as many features as you like but you must use at least four -- choose the ones you believe are most useful.
+
+```{r binomial_reg_model}
+# Create the binomial regression model
+br_model <- glm(PF~age+absences+G1+G2, data=student_math, family = binomial)
+summary(br_model)
+```
+This model shows that the absences is least significant, so let us take it off and make a new model without it.  
+ 
+```{r}
+# Model without absences
+br_model2 <- glm(PF~age+G1+G2, data=student_math, family = binomial)
+summary(br_model2)
+
+```
+Here we can see the G1 has a high p value, so it should be removed.  
+
+```{r}
+# Take off G1
+br_model3 <- glm(PF~age+G2, data=student_math, family = binomial)
+summary(br_model3)
+
+```
+Now the p-value of age is higher than it was in the earlier model. The Akaike Information criteria increased here compared to the second model which has the lowest AIC. we may consider this to be the best model among the three but using the Chi-square test will be wise at this point.
+
+
+
+## 4. Model Equation:  
+
+State the regression equation.
+
+```{r}
+# Compare all the model 1 and 2.
+
+anova_mod1_2 <- anova(br_model, br_model2, test="Chisq")
+anova_mod1_2
+summary(br_model2)
+
+```
+The equation for the best model which is the second model is:  
+
+Model 2: PF ~ age + G1 + G2.  
+
+Looking at the log odds of probability of pass-fail.  
+
+__logit(P(PF))__ = −10.8744 -0.3945 × age + (0.2519 * G1) + (1.6635 * G2).  
+
+__logit(P(PF))__ is the log odds of the prob of PF, all the predictor variables stand as multiples of their coefficients form the above summary of the model.  
+
+
+## 5. Model Accuracy:  
+
+```{r}
+br_model2_prediction <- predict(br_model2, student_math[c(c("age", "G1", "G2"))], type = 'response')
+
+br_model2_prediction <-  ifelse(br_model2_prediction>0.5, 1, 0)
+
+
+err <- mean(br_model2_prediction != student_math$PF)
+err
+accuracy <- 1 - err
+accuracy
+```
+
+The accuracy of the second model is `r accuracy`.  
+
+## 6. KNN Model:  
+
+Predict the variable using kNN (from a package or implementation of your choice) and calculate the accuracy. Compare the accuracy with that of your logistic regression model.  
+
+```{r}
+# Create train and dummy test sets
+student_math$PF <- ifelse(student_math$PF==1, "Pass", "Fail")
+tranin_set <- student_math[c("age", "G1", "G2", "PF")]
+test <- data.frame(age= c(16,17), G1=c(15,16), G2=c(14,14), PF = c("Pass","Pass"))
+
+# labels
+train_labs<- tranin_set$PF
+test_labs<- test$PF
+
+# Remove PF form train and test
+train<- tranin_set[, 1:3]
+test_set <- test[, 1:3]
+
+
+# knn model
+library(class)
+knn_model1 <- knn(train = train , test = test_set , cl= tranin_set$PF, k = 3,prob=TRUE)
+knn_model1
+
+
+#library(gmodels)
+#Xtable_knn_model1 <- CrossTable(x = test_labs, 
+#                                y = knn_model1,
+#                                prop.test= TRUE)
+
+#stats::fisher.test(test_labs, knn_model1)
+
+# Check accuracy based on correct outcomes:
+knn_model1
+test_labs
+acc <- mean(knn_model1 == test_labs)
+acc
+
+```
+ I have created a dummy test model and used the training set I used in Q5 as instructed on Teams Chat. I then just decided to get the mean of the outcomes and since both actual cases were pass and both predicted cases were fail, the accuracy of this model is 0.  
+
+
+## 7. Difference between the Logistic regression and Knn alogorithms:  
+
+What is the difference between the two algorithms? How would you choose which one to use?
+
+### Answer:  
+ 
+Based on the accuracy, the Logistic regression model is far more accurate and will be the better over knn model.  
+
+The differences between Logistic and Regression algos are clarified below:
+
+|                |   knn algos                                         |   Logistic Regression  algos                          |
+| :---:          | :---:                                               | :---:                                                 |       
+| Variables      |   variables should have complex relationships       |   variables should have linear relationship           |
+| Interpretation | Not easy to interpret nearest neighbors.            |   easier to interpret                                 |
+| Computing cost | Expensive                                           |   Faster so less expensive                            |
+| Outliers       | Sensitive to outliers                               |   Minimal impact from outliers with larger data sets  |
+| Scaling        | Poor scaling                                        |   Scales well with large data sets                    |
